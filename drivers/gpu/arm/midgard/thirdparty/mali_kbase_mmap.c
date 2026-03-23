@@ -482,7 +482,9 @@ unsigned long kbase_context_get_unmapped_area(struct kbase_context *const kctx,
 			kbase_gpu_vm_unlock(kctx);
 			return -EINVAL;
 		}
-		if (!(reg->flags & KBASE_REG_GPU_NX)) {
+		if (reg->flags & KBASE_REG_LOW32_ALIAS) {
+			high_limit = min_t(unsigned long, high_limit, 0x100000000ULL);
+		} else if (!(reg->flags & KBASE_REG_GPU_NX)) {
 			if (cpu_va_bits > gpu_pc_bits) {
 				align_offset = 1ULL << gpu_pc_bits;
 				align_mask = align_offset - 1;

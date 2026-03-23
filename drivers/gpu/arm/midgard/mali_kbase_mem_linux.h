@@ -104,6 +104,18 @@ u64 kbase_mem_alias(struct kbase_context *kctx, base_mem_alloc_flags *flags, u64
 		    struct base_mem_aliasing_info *ai, u64 *num_pages);
 
 /**
+ * kbase_mem_low32_alias_create - Create a cookie-backed low-address alias for
+ *                                an existing userspace CPU mapping
+ * @kctx:      The kernel context
+ * @user_addr: CPU address inside the source mapping
+ * @size:      Size in bytes to alias
+ * @cookie:    Returned BASE_MEM_COOKIE-style handle
+ *
+ * Return: 0 on success or error code
+ */
+int kbase_mem_low32_alias_create(struct kbase_context *kctx, u64 user_addr, u64 size, u64 *cookie);
+
+/**
  * kbase_mem_flags_change - Change the flags for a memory region
  *
  * @kctx:     The kernel context

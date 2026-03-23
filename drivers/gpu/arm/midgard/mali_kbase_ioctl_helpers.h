@@ -187,6 +187,12 @@ static inline int check_padding_KBASE_IOCTL_MEM_ALIAS(union kbase_ioctl_mem_alia
 	return 0;
 }
 
+static inline int check_padding_KBASE_IOCTL_MEM_LOW32_ALIAS_CREATE(
+	struct kbase_ioctl_mem_low32_alias_create *p)
+{
+	return 0;
+}
+
 static inline int check_padding_KBASE_IOCTL_MEM_IMPORT(union kbase_ioctl_mem_import *p)
 {
 	return 0;

@@ -1121,6 +1121,12 @@ exit:
 	return err;
 }
 
+static int kbase_api_mem_low32_alias_create(
+	struct kbase_context *kctx, struct kbase_ioctl_mem_low32_alias_create *create)
+{
+	return kbase_mem_low32_alias_create(kctx, create->user_addr, create->size, &create->cookie);
+}
+
 static int kbase_api_mem_import(struct kbase_context *kctx, union kbase_ioctl_mem_import *import)
 {
 	int ret;
@@ -1755,6 +1761,11 @@ static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case KBASE_IOCTL_MEM_ALIAS:
 		KBASE_HANDLE_IOCTL_INOUT(KBASE_IOCTL_MEM_ALIAS, kbase_api_mem_alias,
 					 union kbase_ioctl_mem_alias, kctx);
+		break;
+	case KBASE_IOCTL_MEM_LOW32_ALIAS_CREATE:
+		KBASE_HANDLE_IOCTL_INOUT(KBASE_IOCTL_MEM_LOW32_ALIAS_CREATE,
+					 kbase_api_mem_low32_alias_create,
+					 struct kbase_ioctl_mem_low32_alias_create, kctx);
 		break;
 	case KBASE_IOCTL_MEM_IMPORT:
 		KBASE_HANDLE_IOCTL_INOUT(KBASE_IOCTL_MEM_IMPORT, kbase_api_mem_import,

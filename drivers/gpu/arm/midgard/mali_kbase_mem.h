@@ -201,6 +201,7 @@ static inline void kbase_process_page_usage_inc(struct kbase_context *kctx, int 
 #define KBASE_REG_RESERVED_BIT_23 (1ul << 23)
 
 /* Bit 24 is currently unused and is available for use for a new flag */
+#define KBASE_REG_LOW32_ALIAS (1ul << 24)
 
 /* Memory has permanent kernel side mapping */
 #define KBASE_REG_PERMANENT_KERNEL_MAPPING (1ul << 25)
@@ -1639,6 +1640,25 @@ static inline void kbase_process_page_usage_dec(struct kbase_context *kctx, int 
  */
 int kbasep_find_enclosing_cpu_mapping_offset(struct kbase_context *kctx, unsigned long uaddr,
 					     size_t size, u64 *offset);
+
+/**
+ * kbasep_find_enclosing_cpu_mapping() - Find the CPU mapping containing a
+ *                                       given address range
+ *
+ * @kctx:      The kernel base context used for the allocation.
+ * @uaddr:     Start of the CPU virtual address range.
+ * @size:      Size of the CPU virtual address range (in bytes).
+ * @offset:    The offset from the start of the allocation to the specified CPU
+ *             virtual address.
+ *
+ * The caller must hold the process mmap lock, for example via
+ * kbase_os_mem_map_lock().
+ *
+ * Return: The CPU mapping if the range is fully enclosed, NULL otherwise.
+ */
+struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(struct kbase_context *kctx,
+							    unsigned long uaddr, size_t size,
+							    u64 *offset);
 
 /**
  * kbasep_find_enclosing_gpu_mapping_start_and_offset() - Find the address of

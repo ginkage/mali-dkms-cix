@@ -1947,6 +1947,189 @@ bad_flags:
 	return 0;
 }
 
+int kbase_mem_low32_alias_create(struct kbase_context *kctx, u64 user_addr, u64 size, u64 *cookie)
+{
+	struct kbase_cpu_mapping *src_map;
+	struct kbase_va_region *src_reg;
+	struct base_mem_aliasing_info alias_info = { 0 };
+	base_mem_alloc_flags alias_flags = 0;
+	base_mem_alloc_flags src_reg_flags = 0;
+	u64 mapping_offset = 0;
+	u64 end_addr;
+	u64 aligned_end_offset;
+	u64 backed_pages;
+	u64 alias_handle;
+	u64 alias_pages;
+	unsigned long aligned_user_addr;
+	size_t aligned_size;
+	unsigned int cookie_nr;
+	int ret = 0;
+
+	if (!cookie || !size) {
+		dev_warn_ratelimited(kctx->kbdev->dev,
+				     "low32 alias reject: invalid args user_addr=0x%llx size=0x%llx cookie=%pK\n",
+				     (unsigned long long)user_addr, (unsigned long long)size, cookie);
+		return -EINVAL;
+	}
+
+	*cookie = 0;
+
+	end_addr = user_addr + size;
+	if (end_addr < user_addr) {
+		dev_warn_ratelimited(kctx->kbdev->dev,
+				     "low32 alias reject: address overflow user_addr=0x%llx size=0x%llx\n",
+				     (unsigned long long)user_addr, (unsigned long long)size);
+		return -EINVAL;
+	}
+
+	aligned_user_addr = (unsigned long)(user_addr & PAGE_MASK);
+	aligned_size = PAGE_ALIGN(end_addr - aligned_user_addr);
+	if (!aligned_size) {
+		dev_warn_ratelimited(kctx->kbdev->dev,
+				     "low32 alias reject: aligned size is zero user_addr=0x%llx size=0x%llx\n",
+				     (unsigned long long)user_addr, (unsigned long long)size);
+		return -EINVAL;
+	}
+
+	kbase_os_mem_map_lock(kctx);
+
+	src_map = kbasep_find_enclosing_cpu_mapping(kctx, aligned_user_addr, aligned_size,
+						    &mapping_offset);
+	if (!src_map) {
+		dev_warn_ratelimited(kctx->kbdev->dev,
+				     "low32 alias reject: no source cpu mapping user_addr=0x%llx aligned_user_addr=0x%lx size=0x%zx\n",
+				     (unsigned long long)user_addr, aligned_user_addr, aligned_size);
+		ret = -EINVAL;
+		goto out_unlock_map;
+	}
+
+	src_reg = src_map->region;
+	if (kbase_is_region_invalid_or_free(src_reg) || kbase_is_region_shrinkable(src_reg) ||
+	    kbase_va_region_is_no_user_free(src_reg) ||
+	    !(src_reg->flags & (KBASE_REG_CPU_RD | KBASE_REG_CPU_WR)) ||
+	    (src_reg->flags & (KBASE_REG_IMPORT_PAD | KBASE_REG_CSF_EVENT | KBASE_REG_PROTECTED)) ||
+	    !src_reg->cpu_alloc || !src_reg->gpu_alloc ||
+	    src_reg->cpu_alloc->type != KBASE_MEM_TYPE_NATIVE ||
+	    src_reg->gpu_alloc->type != KBASE_MEM_TYPE_NATIVE) {
+		dev_warn_ratelimited(
+			kctx->kbdev->dev,
+			"low32 alias reject: unsupported source flags=0x%llx cpu_alloc=%d gpu_alloc=%d user_addr=0x%llx size=0x%zx\n",
+			(unsigned long long)src_reg->flags,
+			src_reg->cpu_alloc ? (int)src_reg->cpu_alloc->type : -1,
+			src_reg->gpu_alloc ? (int)src_reg->gpu_alloc->type : -1,
+			(unsigned long long)user_addr, aligned_size);
+		ret = -EINVAL;
+		goto out_unlock_map;
+	}
+
+	aligned_end_offset = mapping_offset + aligned_size;
+	if (aligned_end_offset < mapping_offset) {
+		dev_warn_ratelimited(
+			kctx->kbdev->dev,
+			"low32 alias reject: offset overflow mapping_offset=0x%llx aligned_size=0x%zx user_addr=0x%llx\n",
+			(unsigned long long)mapping_offset, aligned_size,
+			(unsigned long long)user_addr);
+		ret = -EINVAL;
+		goto out_unlock_map;
+	}
+
+	backed_pages = kbase_reg_current_backed_size(src_reg);
+	if ((mapping_offset >> PAGE_SHIFT) >= backed_pages ||
+	    PFN_UP(aligned_end_offset) > backed_pages) {
+		dev_warn_ratelimited(
+			kctx->kbdev->dev,
+			"low32 alias reject: range outside backed pages mapping_offset=0x%llx end_offset=0x%llx backed_pages=0x%llx user_addr=0x%llx\n",
+			(unsigned long long)mapping_offset,
+			(unsigned long long)aligned_end_offset,
+			(unsigned long long)backed_pages,
+			(unsigned long long)user_addr);
+		ret = -EINVAL;
+		goto out_unlock_map;
+	}
+
+	src_reg_flags = src_reg->flags;
+
+	if (src_reg_flags & KBASE_REG_CPU_RD)
+		alias_flags |= BASE_MEM_PROT_CPU_RD;
+	if (src_reg_flags & KBASE_REG_CPU_WR)
+		alias_flags |= BASE_MEM_PROT_CPU_WR;
+	if (src_reg_flags & KBASE_REG_GPU_RD)
+		alias_flags |= BASE_MEM_PROT_GPU_RD;
+	if (src_reg_flags & KBASE_REG_GPU_WR)
+		alias_flags |= BASE_MEM_PROT_GPU_WR;
+	if (src_reg_flags & KBASE_REG_CPU_CACHED)
+		alias_flags |= BASE_MEM_CACHED_CPU;
+	if (src_reg_flags & KBASE_REG_SHARE_BOTH)
+		alias_flags |= BASE_MEM_COHERENT_SYSTEM;
+	else if (src_reg_flags & KBASE_REG_SHARE_IN)
+		alias_flags |= BASE_MEM_COHERENT_LOCAL;
+
+	/*
+	 * Keep the process mmap lock held until the alias is created so the
+	 * source VMA can't be unmapped and recycled to a different region in
+	 * this context between validation and kbase_mem_alias().
+	 */
+	alias_info.gpu_va = src_reg->start_pfn << PAGE_SHIFT;
+	alias_info.offset = mapping_offset >> PAGE_SHIFT;
+	alias_info.length = PFN_UP(aligned_end_offset) - alias_info.offset;
+
+	alias_handle = kbase_mem_alias(kctx, &alias_flags, alias_info.length, 1, &alias_info,
+				       &alias_pages);
+	if (!alias_handle) {
+		dev_warn_ratelimited(
+			kctx->kbdev->dev,
+			"low32 alias reject: kbase_mem_alias failed gpu_va=0x%llx offset=0x%llx length=0x%llx flags=0x%llx\n",
+			(unsigned long long)alias_info.gpu_va,
+			(unsigned long long)alias_info.offset,
+			(unsigned long long)alias_info.length,
+			(unsigned long long)alias_flags);
+		ret = -ENOMEM;
+		goto out_unlock_map;
+	}
+
+	if (alias_handle < BASE_MEM_COOKIE_BASE || alias_handle >= BASE_MEM_FIRST_FREE_ADDRESS) {
+		dev_warn_ratelimited(kctx->kbdev->dev,
+				     "low32 alias reject: non-cookie handle 0x%llx for source gpu_va=0x%llx\n",
+				     (unsigned long long)alias_handle,
+				     (unsigned long long)alias_info.gpu_va);
+		ret = -EINVAL;
+		goto out_free_alias;
+	}
+
+	cookie_nr = PFN_DOWN(alias_handle - BASE_MEM_COOKIE_BASE);
+
+	kbase_gpu_vm_lock(kctx);
+	if (!kctx->pending_regions[cookie_nr]) {
+		kbase_gpu_vm_unlock(kctx);
+		dev_warn_ratelimited(kctx->kbdev->dev,
+				     "low32 alias reject: pending region missing for cookie=%u handle=0x%llx\n",
+				     cookie_nr, (unsigned long long)alias_handle);
+		ret = -EINVAL;
+		goto out_free_alias;
+	}
+
+	if (src_reg_flags & KBASE_REG_CPU_WR)
+		kctx->pending_regions[cookie_nr]->flags |= KBASE_REG_CPU_WR;
+	if (src_reg_flags & KBASE_REG_CPU_CACHED)
+		kctx->pending_regions[cookie_nr]->flags |= KBASE_REG_CPU_CACHED;
+	kctx->pending_regions[cookie_nr]->flags |= KBASE_REG_LOW32_ALIAS;
+	kbase_gpu_vm_unlock(kctx);
+
+	*cookie = alias_handle;
+	dev_dbg(kctx->kbdev->dev,
+		"low32 alias created: user_addr=0x%llx size=0x%llx cookie=0x%llx alias_pages=0x%llx\n",
+		(unsigned long long)user_addr, (unsigned long long)size,
+		(unsigned long long)alias_handle, (unsigned long long)alias_pages);
+
+out_unlock_map:
+	kbase_os_mem_map_unlock(kctx);
+	return ret;
+
+out_free_alias:
+	kbase_mem_free(kctx, alias_handle);
+	goto out_unlock_map;
+}
+
 int kbase_mem_import(struct kbase_context *kctx, enum base_mem_import_type type,
 		     void __user *phandle, u32 padding, u64 *gpu_va, u64 *va_pages,
 		     base_mem_alloc_flags *flags)

@@ -605,6 +605,22 @@ struct kbase_ioctl_tlstream_stats {
  *         _IOWR(KBASE_IOCTL_EXTRA_TYPE, 0, struct my_ioctl_args)
  */
 
+/**
+ * struct kbase_ioctl_mem_low32_alias_create - Create a low-address CPU alias
+ *                                             for an existing CPU mapping
+ * @user_addr: Existing userspace CPU address within the source kbase mapping.
+ * @size:      Size in bytes of the range to alias.
+ * @cookie:    Returned BASE_MEM_COOKIE-style handle for mmap().
+ */
+struct kbase_ioctl_mem_low32_alias_create {
+	__u64 user_addr;
+	__u64 size;
+	__u64 cookie;
+};
+
+#define KBASE_IOCTL_MEM_LOW32_ALIAS_CREATE \
+	_IOWR(KBASE_IOCTL_EXTRA_TYPE, 0, struct kbase_ioctl_mem_low32_alias_create)
+
 /**********************************
  * Definitions for GPU properties *
  **********************************/

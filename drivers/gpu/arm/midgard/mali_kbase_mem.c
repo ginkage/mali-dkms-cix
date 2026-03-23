@@ -630,9 +630,9 @@ int kbase_gpu_munmap(struct kbase_context *kctx, struct kbase_va_region *reg)
 	return err;
 }
 
-static struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(struct kbase_context *kctx,
-								   unsigned long uaddr, size_t size,
-								   u64 *offset)
+struct kbase_cpu_mapping *kbasep_find_enclosing_cpu_mapping(struct kbase_context *kctx,
+							    unsigned long uaddr, size_t size,
+							    u64 *offset)
 {
 	struct vm_area_struct *vma;
 	struct kbase_cpu_mapping *map;
