@@ -72,6 +72,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/of.h>
+#include <linux/property.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
@@ -3863,7 +3864,7 @@ int kbase_device_coherency_init(struct kbase_device *kbdev)
 	kbdev->system_coherency = COHERENCY_NONE;
 
 	/* device tree may override the coherency */
-	if (IS_ENABLED(CONFIG_OF)) {
+	if (IS_ENABLED(CONFIG_OF) && kbdev->dev->of_node) {
 		u32 override_coherency;
 		const void *coherency_override_dts;
 		bool dma_coherent;
@@ -3899,6 +3900,22 @@ int kbase_device_coherency_init(struct kbase_device *kbdev)
 		kbdev->system_coherency = override_coherency;
 
 		dev_info(kbdev->dev, "Using coherency mode %u set from dtb", override_coherency);
+	} else if (device_get_dma_attr(kbdev->dev) == DEV_DMA_COHERENT) {
+		/* No DT node (ACPI boot): honour the firmware's _CCA. With _CCA=1 the
+		 * DMA API treats the device as coherent and skips cache maintenance,
+		 * so the GPU must snoop CPU caches, i.e. run ACE-Lite. Running
+		 * COHERENCY_NONE here would let the GPU read stale data.
+		 */
+		if (!kbase_device_supports_coherency_mode(kbdev, COHERENCY_ACE_LITE)) {
+			dev_err(kbdev->dev,
+				"Firmware declares the GPU DMA-coherent (_CCA) but ACE-Lite is unsupported");
+			err = -EINVAL;
+			goto early_exit;
+		}
+
+		kbdev->system_coherency = COHERENCY_ACE_LITE;
+
+		dev_info(kbdev->dev, "Using ACE-Lite coherency (firmware _CCA)");
 	}
 early_exit:
 	kbdev->gpu_props.coherency_mode = kbdev->system_coherency;
@@ -4899,6 +4916,7 @@ module_init(kbase_driver_init);
 module_exit(kbase_driver_exit);
 #endif
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Arm Mali GPU kernel driver");
 MODULE_VERSION(MALI_RELEASE_NAME " (UK version " __stringify(BASE_UK_VERSION_MAJOR) "." __stringify(
 	BASE_UK_VERSION_MINOR) ")");
 MODULE_SOFTDEP("pre: memory_group_manager protected_memory_allocator");
