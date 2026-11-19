@@ -642,7 +642,13 @@ static inline unsigned long
 kbase_mm_get_unmapped_area_helper(struct mm_struct *mm, struct file *filp, unsigned long addr,
 				  unsigned long len, unsigned long pgoff, unsigned long flags)
 {
-#if (KERNEL_VERSION(6, 10, 0) <= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(6, 19, 0) <= LINUX_VERSION_CODE)
+	/* mm_get_unmapped_area() dropped its mm parameter in 6.19; it operates on
+	 * current->mm, which is the mm kbase's mmap path is working on anyway.
+	 */
+	(void)mm;
+	return mm_get_unmapped_area(filp, addr, len, pgoff, flags);
+#elif (KERNEL_VERSION(6, 10, 0) <= LINUX_VERSION_CODE)
 	return mm_get_unmapped_area(mm, filp, addr, len, pgoff, flags);
 #else
 	return mm->get_unmapped_area(filp, addr, len, pgoff, flags);
@@ -759,6 +765,79 @@ static inline int of_changeset_add_prop_string_array(struct of_changeset *ocs,
 #endif
 #ifndef DEVFREQ_GOV_PASSIVE
 #define DEVFREQ_GOV_PASSIVE "passive"
+#endif
+
+#if (KERNEL_VERSION(6, 17, 0) <= LINUX_VERSION_CODE)
+/* The per-page __SetPageMovable()/__ClearPageMovable() API was removed in 6.17 in
+ * favour of a page-type-based scheme (set_movable_ops(ops, enum pagetype)). If the
+ * kernel carries a PGTY_mali_gpu page type (mali-dkms-rockchip kernel-patches/0001),
+ * wire the markers onto it for real GPU page migration; otherwise compile them to
+ * no-ops and kbase_mem_migrate_init() disables migration so kbase's state stays
+ * consistent. Page migration is only a memory-compaction optimisation.
+ */
+#include <linux/page-flags.h>
+#include <linux/migrate.h>
+#ifdef PGTY_mali_gpu
+#define KBASE_PAGE_MIGRATION_SUPPORTED 1
+#define __SetPageMovable(page, ops) \
+	do { (void)(ops); SetPageMovableOps(page); __SetPageMaliGpu(page); } while (0)
+#define __ClearPageMovable(page) __ClearPageMaliGpu(page)
+#else
+#define KBASE_PAGE_MIGRATION_SUPPORTED 0
+#define __SetPageMovable(page, ops) do { (void)(page); (void)(ops); } while (0)
+#define __ClearPageMovable(page) do { (void)(page); } while (0)
+#endif
+#endif
+
+#if (KERNEL_VERSION(6, 17, 0) > LINUX_VERSION_CODE)
+/* alloc_workqueue() WARNs on 6.17+ if neither WQ_PERCPU nor WQ_UNBOUND is given.
+ * Per-CPU was the implicit behaviour before, so it is a no-op on older kernels.
+ */
+#define WQ_PERCPU 0
+#endif
+
+#if (KERNEL_VERSION(7, 0, 0) <= LINUX_VERSION_CODE)
+#include <linux/hrtimer.h>
+/* hrtimer_init() was removed in favour of hrtimer_setup(), which takes the
+ * callback up front and WARNs on a NULL one. kbase initialises the timer and
+ * assigns .function right after, so map hrtimer_init() onto hrtimer_setup()
+ * with a placeholder callback that the assignment overwrites.
+ */
+static inline enum hrtimer_restart kbase_hrtimer_setup_noop(struct hrtimer *timer)
+{
+	(void)timer;
+	return HRTIMER_NORESTART;
+}
+#define hrtimer_init(timer, clock_id, mode) \
+	hrtimer_setup((timer), kbase_hrtimer_setup_noop, (clock_id), (mode))
+
+/* del_timer()/del_timer_sync() were removed; timer_delete()/timer_delete_sync()
+ * are identical replacements.
+ */
+#define del_timer(timer) timer_delete(timer)
+#define del_timer_sync(timer) timer_delete_sync(timer)
+
+#include <linux/dma-fence.h>
+/* dma_fence_signal() became void; keep `ret = dma_fence_signal(...)` call sites
+ * compiling. The shim is defined before the macro so it calls the real function.
+ */
+static inline int kbase_dma_fence_signal_compat(struct dma_fence *fence)
+{
+	dma_fence_signal(fence);
+	return 0;
+}
+#define dma_fence_signal(fence) kbase_dma_fence_signal_compat(fence)
+
+#include <linux/mm_types.h>
+#include <linux/shmem_fs.h>
+/* shmem_file_setup()'s flags argument became the typed vma_flags_t. */
+static inline struct file *kbase_shmem_file_setup_compat(const char *name, loff_t size,
+							 unsigned long flags)
+{
+	return shmem_file_setup(name, size, legacy_to_vma_flags(flags));
+}
+#define shmem_file_setup(name, size, flags) \
+	kbase_shmem_file_setup_compat((name), (size), (flags))
 #endif
 
 #endif /* _VERSION_COMPAT_DEFS_H_ */

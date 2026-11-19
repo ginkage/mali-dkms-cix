@@ -296,7 +296,10 @@ ifeq ($(CONFIG_MALI_KCOV),y)
 endif
 
 all:
-	$(MAKE) -C $(KDIR) M=$(M) $(MAKE_ARGS) EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KBUILD_EXTRA_SYMBOLS="$(EXTRA_SYMBOLS)" modules
+	# Kbuild dropped EXTRA_CFLAGS support (kernel commit e966ad0edd005, v6.15), which
+	# silently discards every -DCONFIG_MALI_* define computed above. Pass them via
+	# KCFLAGS instead, which works on old and new kernels alike.
+	$(MAKE) -C $(KDIR) M=$(M) $(MAKE_ARGS) KCFLAGS="$(KCFLAGS) $(EXTRA_CFLAGS)" KBUILD_EXTRA_SYMBOLS="$(EXTRA_SYMBOLS)" modules
 
 modules_install:
 	$(MAKE) -C $(KDIR) M=$(M) $(MAKE_ARGS) modules_install
