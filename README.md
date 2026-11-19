@@ -20,11 +20,25 @@ The module binds ACPI `CIXH5000`, the same device Panthor binds, and udev autolo
 # /etc/modprobe.d/blacklist-cix-gpu.conf: Panthor mode, mali_kbase only by hand
 #blacklist panthor
 blacklist mali_kbase
-#options linlon_dp enable_render=1
+options linlon_dp enable_render=1
 
-sudo dkms add .            # copies to /usr/src/cix-gpu-kmd-1.0.0
+# Snapshot a commit (committed files only) into /usr/src and build it
+sudo mkdir -p /usr/src/cix-gpu-kmd-1.0.0
+git archive HEAD | sudo tar -x -C /usr/src/cix-gpu-kmd-1.0.0
 sudo dkms install cix-gpu-kmd/1.0.0
-sudo install -m644 /path/to/cix-gpu-umd/usr/lib/firmware/mali_csffw.bin /lib/firmware/
+
+# firmware: shipped by the cix-gpu-umd deb (/usr/lib/firmware/mali_csffw.bin); without it:
+# sudo install -m644 /path/to/cix-gpu-umd/usr/lib/firmware/mali_csffw.bin /lib/firmware/
 ```
+
+To deploy a newer commit:
+
+```sh
+sudo dkms remove cix-gpu-kmd/1.0.0 --all
+sudo rm -rf /usr/src/cix-gpu-kmd-1.0.0
+# then the three snapshot/install lines above
+```
+
+DKMS rebuilds from `/usr/src` for every new kernel, so a snapshot keeps those rebuilds on a known commit instead of whatever is checked out, and doesn't depend on where this checkout lives.
 
 kbase loads `/lib/firmware/mali_csffw.bin`, and Panthor uses `arm/mali/arch12.8/mali_csffw.bin`, so the two firmware files don't clash. To switch to the vendor stack, swap the two `blacklist` lines and reboot.
