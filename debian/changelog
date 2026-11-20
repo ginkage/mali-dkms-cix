@@ -1,0 +1,6 @@
+cix-gpu-kmd (1.0.0+cix1) resolute; urgency=medium
+
+  * Package the 7.x port of CIX's kbase (r54p1, 2026Q2 RC4) for DKMS, as
+    cix-gpu-dkms with DKMS name cix-gpu-kmd/1.0.0 like CIX's package.
+
+ -- Ivan Podogov <ginkage.uk@gmail.com>  Fri, 20 Nov 2026 15:35:17 +0000

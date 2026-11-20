@@ -1,0 +1,23 @@
+Source: cix-gpu-kmd
+Section: kernel
+Priority: optional
+Maintainer: Ivan Podogov <ginkage.uk@gmail.com>
+Build-Depends: debhelper-compat (= 13), dh-dkms
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Vcs-Git: https://github.com/ginkage/mali-dkms-cix
+
+Package: cix-gpu-dkms
+Architecture: all
+Depends: ${misc:Depends}
+Suggests: libmali-cix
+Description: Arm Mali kbase kernel driver for the CIX P1 GPU (DKMS)
+ Builds mali_kbase.ko (with memory_group_manager and protected_memory_allocator),
+ the Arm Mali "kbase" kernel driver for the Mali-G720-Immortalis (CSF) GPU of
+ the CIX P1 / CD8180, at DDK release r54p1 to match libmali. CIX's driver,
+ ported to mainline ARM64 7.x kernels, with ACE-Lite coherency from the ACPI
+ _CCA of the GPU device.
+ .
+ DKMS builds the module for each installed kernel with CONFIG_ARCH_CIX and its
+ headers. It provides /dev/mali0 for libmali-cix in place of the in-tree
+ panthor driver; "mali-switch" (libmali-cix) chooses between the two.

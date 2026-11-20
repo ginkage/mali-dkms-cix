@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+# A DKMS source package: DKMS builds the module on the target, against its kernel headers.
+# dh_dkms installs debian/cix-gpu-dkms.dkms as /usr/src/cix-gpu-kmd-1.0.0/dkms.conf and adds the
+# dkms add/build/install and remove maintainer scripts; debian/cix-gpu-dkms.install stages the source.
+
+%:
+	dh $@ --with dkms
+
+override_dh_auto_configure:
+override_dh_auto_build:
+override_dh_auto_test:
+override_dh_auto_install:

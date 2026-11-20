@@ -5,3 +5,8 @@
 *.mod.c
 Module.symvers
 modules.order
+/debian/cix-gpu-dkms/
+/debian/.debhelper/
+/debian/files
+/debian/*.substvars
+/debian/debhelper-build-stamp
