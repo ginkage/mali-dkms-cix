@@ -6,6 +6,9 @@
 %:
 	dh $@ --with dkms
 
+# The top-level Makefile builds and cleans against the running kernel's build tree, which a package build
+# (CI container) need not have; there is nothing to build or clean here.
+override_dh_auto_clean:
 override_dh_auto_configure:
 override_dh_auto_build:
 override_dh_auto_test:
