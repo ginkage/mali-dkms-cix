@@ -1,3 +1,11 @@
+cix-gpu-kmd (1.0.0+cix2) resolute; urgency=medium
+
+  * Add the low32 alias ioctl (KBASE_IOCTL_MEM_LOW32_ALIAS_CREATE) from
+    mali-vulkan-icd-wrapper: a second CPU mapping of GPU memory below 4 GiB,
+    which the WSI layer uses for 32-bit Windows games under Wine (WoW64).
+
+ -- Ivan Podogov <ginkage.uk@gmail.com>  Sat, 21 Nov 2026 13:12:36 +0000
+
 cix-gpu-kmd (1.0.0+cix1) resolute; urgency=medium
 
   * Package the 7.x port of CIX's kbase (r54p1, 2026Q2 RC4) for DKMS, as
